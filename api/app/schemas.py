@@ -55,3 +55,35 @@ class WorkflowRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TaskRead(BaseModel):
+    id: uuid.UUID
+    run_id: uuid.UUID
+    name: str
+    type: str
+    status: str
+    payload: dict | None
+    attempt: int
+    max_retries: int
+    timeout_seconds: int
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RunRead(BaseModel):
+    id: uuid.UUID
+    workflow_id: uuid.UUID
+    status: str
+    triggered_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class RunDetail(RunRead):
+    tasks: list[TaskRead]
