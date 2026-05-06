@@ -245,7 +245,7 @@ Update this section as work progresses. Mark items `[x]` when shipped.
 - [x] Monorepo skeleton + docker-compose
 - [x] DB schema + migrations (workflows, runs, tasks)
 - [x] FastAPI: workflow CRUD, run trigger, run query
-- [ ] Go scheduler: poll runs, resolve DAG, dispatch
+- [x] Go scheduler: poll runs, resolve DAG, dispatch
 - [ ] Go worker: shell + http task types
 - [ ] Python worker: python task type
 - [ ] End-to-end happy path test
