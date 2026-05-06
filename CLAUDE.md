@@ -257,7 +257,7 @@ Update this section as work progresses. Mark items `[x]` when shipped.
 - [x] FastAPI: workflow CRUD, run trigger, run query
 - [x] Go scheduler: poll runs, resolve DAG, dispatch
 - [x] Go worker: shell + http task types
-- [ ] Python worker: python task type
+- [x] Python worker: python task type
 - [ ] End-to-end happy path test
 
 ### Week 2 — Polish + Cloud
