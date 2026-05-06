@@ -9,7 +9,7 @@ down:
 logs:
 	docker compose logs -f
 
-test: test-api test-go test-worker-py
+test: test-api test-go test-worker-py test-web
 
 test-api:
 	cd api && .venv/bin/python -m pytest tests/ -v
@@ -20,6 +20,9 @@ test-go:
 
 test-worker-py:
 	cd worker-py && .venv/bin/python -m pytest tests/ -v
+
+test-web:
+	cd web && npm run test -- --run
 
 lint:
 	cd api && ruff check . && mypy .

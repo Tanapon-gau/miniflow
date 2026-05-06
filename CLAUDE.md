@@ -261,7 +261,7 @@ Update this section as work progresses. Mark items `[x]` when shipped.
 - [x] End-to-end happy path test
 
 ### Week 2 — Polish + Cloud
-- [ ] React UI: DAG view, run list, log stream
+- [x] React UI: DAG view, run list, log stream
 - [ ] Retry logic + exponential backoff
 - [ ] Timeouts and cancellation
 - [ ] Terraform modules (network, db, redis, services)
