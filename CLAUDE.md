@@ -243,7 +243,7 @@ Update this section as work progresses. Mark items `[x]` when shipped.
 
 ### Week 1 — Core Engine
 - [x] Monorepo skeleton + docker-compose
-- [ ] DB schema + migrations (workflows, runs, tasks)
+- [x] DB schema + migrations (workflows, runs, tasks)
 - [ ] FastAPI: workflow CRUD, run trigger, run query
 - [ ] Go scheduler: poll runs, resolve DAG, dispatch
 - [ ] Go worker: shell + http task types
