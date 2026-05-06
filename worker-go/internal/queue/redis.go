@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/Tanapon-gau/miniflow/worker-go/internal/constants"
 	"github.com/Tanapon-gau/miniflow/worker-go/internal/model"
 )
 
@@ -23,25 +23,22 @@ func (q *Queue) Close() error {
 	return q.client.Close()
 }
 
-// BRPop blocks until a message arrives on tasks:shell or tasks:http.
-// Returns the raw JSON bytes and the queue name it came from.
 func (q *Queue) BRPop(ctx context.Context) ([]byte, string, error) {
-	res, err := q.client.BRPop(ctx, 5*time.Second, "tasks:shell", "tasks:http").Result()
+	result, err := q.client.BRPop(ctx, constants.BRPopTimeout, constants.QueueShell, constants.QueueHTTP).Result()
 	if err != nil {
 		return nil, "", err
 	}
 	// BRPop returns [key, value]
-	return []byte(res[1]), res[0], nil
+	return []byte(result[1]), result[0], nil
 }
 
-// PublishEvent appends an event to the Redis stream "events".
-func (q *Queue) PublishEvent(ctx context.Context, ev model.Event) error {
-	data, err := json.Marshal(ev)
+func (q *Queue) PublishEvent(ctx context.Context, event model.Event) error {
+	data, err := json.Marshal(event)
 	if err != nil {
-		return fmt.Errorf("marshal event: %w", err)
+		return fmt.Errorf("marshal event for task %s: %w", event.TaskID, err)
 	}
 	return q.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: "events",
+		Stream: constants.EventsStream,
 		Values: map[string]any{"data": string(data)},
 	}).Err()
 }

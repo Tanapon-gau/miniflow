@@ -14,72 +14,69 @@ import (
 	"github.com/Tanapon-gau/miniflow/worker-go/internal/model"
 )
 
-// Result holds the output of a task execution.
 type Result struct {
 	Output string
 	Err    error
 }
 
-// ExecShell runs the shell command specified in msg.Payload.
-// The context carries the caller-supplied deadline (from timeout_seconds).
-func ExecShell(ctx context.Context, msg model.TaskMessage) Result {
-	var p model.ShellPayload
-	if err := json.Unmarshal(msg.Payload, &p); err != nil {
-		return Result{Err: fmt.Errorf("parse shell payload: %w", err)}
+func ExecShell(ctx context.Context, message model.TaskMessage) Result {
+	var payload model.ShellPayload
+	if err := json.Unmarshal(message.Payload, &payload); err != nil {
+		return Result{Err: fmt.Errorf("task %s: parse shell payload: %w", message.TaskID, err)}
 	}
-	if p.Command == "" {
-		return Result{Err: fmt.Errorf("shell payload missing 'command'")}
+	if payload.Command == "" {
+		return Result{Err: fmt.Errorf("task %s: shell payload missing required field 'command'", message.TaskID)}
 	}
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", p.Command)
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
+	// context carries the deadline set by timeout_seconds
+	cmd := exec.CommandContext(ctx, "sh", "-c", payload.Command)
+	var outputBuf bytes.Buffer
+	cmd.Stdout = &outputBuf
+	cmd.Stderr = &outputBuf
 
 	if err := cmd.Run(); err != nil {
-		return Result{Output: buf.String(), Err: fmt.Errorf("command failed: %w", err)}
+		return Result{Output: outputBuf.String(), Err: fmt.Errorf("task %s: command %q failed: %w", message.TaskID, payload.Command, err)}
 	}
-	return Result{Output: buf.String()}
+	return Result{Output: outputBuf.String()}
 }
 
-// ExecHTTP performs the HTTP request specified in msg.Payload.
-func ExecHTTP(ctx context.Context, msg model.TaskMessage) Result {
-	var p model.HTTPPayload
-	if err := json.Unmarshal(msg.Payload, &p); err != nil {
-		return Result{Err: fmt.Errorf("parse http payload: %w", err)}
+func ExecHTTP(ctx context.Context, message model.TaskMessage) Result {
+	var payload model.HTTPPayload
+	if err := json.Unmarshal(message.Payload, &payload); err != nil {
+		return Result{Err: fmt.Errorf("task %s: parse http payload: %w", message.TaskID, err)}
 	}
-	if p.URL == "" {
-		return Result{Err: fmt.Errorf("http payload missing 'url'")}
+	if payload.URL == "" {
+		return Result{Err: fmt.Errorf("task %s: http payload missing required field 'url'", message.TaskID)}
 	}
-	if p.Method == "" {
-		p.Method = http.MethodGet
+	if payload.Method == "" {
+		payload.Method = http.MethodGet
 	}
 
 	var bodyReader io.Reader
-	if p.Body != "" {
-		bodyReader = strings.NewReader(p.Body)
+	if payload.Body != "" {
+		bodyReader = strings.NewReader(payload.Body)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, p.Method, p.URL, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, payload.Method, payload.URL, bodyReader)
 	if err != nil {
-		return Result{Err: fmt.Errorf("build request: %w", err)}
+		return Result{Err: fmt.Errorf("task %s: build %s request to %s: %w", message.TaskID, payload.Method, payload.URL, err)}
 	}
-	for k, v := range p.Headers {
-		req.Header.Set(k, v)
+	for headerName, headerValue := range payload.Headers {
+		req.Header.Set(headerName, headerValue)
 	}
 
-	client := &http.Client{Timeout: time.Duration(msg.TimeoutSeconds) * time.Second}
-	resp, err := client.Do(req)
+	client := &http.Client{Timeout: time.Duration(message.TimeoutSeconds) * time.Second}
+	response, err := client.Do(req)
 	if err != nil {
-		return Result{Err: fmt.Errorf("http request: %w", err)}
+		return Result{Err: fmt.Errorf("task %s: %s %s failed: %w", message.TaskID, payload.Method, payload.URL, err)}
 	}
-	defer resp.Body.Close()
+	defer response.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
-	output := fmt.Sprintf("%s %s", resp.Status, string(body))
+	responseBody, _ := io.ReadAll(response.Body)
+	output := fmt.Sprintf("%s %s", response.Status, string(responseBody))
 
-	if resp.StatusCode >= 400 {
-		return Result{Output: output, Err: fmt.Errorf("http %d", resp.StatusCode)}
+	if response.StatusCode >= 400 {
+		return Result{Output: output, Err: fmt.Errorf("task %s: %s %s returned status %d", message.TaskID, payload.Method, payload.URL, response.StatusCode)}
 	}
 	return Result{Output: output}
 }

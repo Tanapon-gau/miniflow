@@ -9,6 +9,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/Tanapon-gau/miniflow/worker-go/internal/constants"
 	"github.com/Tanapon-gau/miniflow/worker-go/internal/db"
 	"github.com/Tanapon-gau/miniflow/worker-go/internal/model"
 	"github.com/Tanapon-gau/miniflow/worker-go/internal/queue"
@@ -23,7 +24,6 @@ func New(database *db.DB, q *queue.Queue) *Worker {
 	return &Worker{db: database, queue: q}
 }
 
-// Run blocks, consuming tasks until ctx is cancelled.
 func (w *Worker) Run(ctx context.Context) {
 	for {
 		if err := ctx.Err(); err != nil {
@@ -32,13 +32,12 @@ func (w *Worker) Run(ctx context.Context) {
 		data, _, err := w.queue.BRPop(ctx)
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
-				// timeout with no message — loop again
 				continue
 			}
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return
 			}
-			log.Printf("brpop error: %v", err)
+			log.Printf("brpop failed: %v", err)
 			continue
 		}
 		w.handle(ctx, data)
@@ -46,57 +45,57 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func (w *Worker) handle(ctx context.Context, data []byte) {
-	var msg model.TaskMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Printf("unmarshal task message: %v", err)
+	var message model.TaskMessage
+	if err := json.Unmarshal(data, &message); err != nil {
+		log.Printf("unmarshal task message failed: %v — raw: %.200s", err, data)
 		return
 	}
 
-	if err := w.db.MarkTaskRunning(ctx, msg.TaskID); err != nil {
-		log.Printf("mark running %s: %v", msg.TaskID, err)
+	if err := w.db.MarkTaskRunning(ctx, message.TaskID); err != nil {
+		log.Printf("mark task %s running failed: %v", message.TaskID, err)
 		return
 	}
-	w.publishEvent(ctx, msg, "started", nil)
+	w.publishEvent(ctx, message, constants.EventStarted, nil)
 
-	taskCtx, cancel := context.WithTimeout(ctx, time.Duration(msg.TimeoutSeconds)*time.Second)
+	taskCtx, cancel := context.WithTimeout(ctx, time.Duration(message.TimeoutSeconds)*time.Second)
 	defer cancel()
 
 	var result Result
-	switch msg.Type {
-	case "shell":
-		result = ExecShell(taskCtx, msg)
-	case "http":
-		result = ExecHTTP(taskCtx, msg)
+	switch message.Type {
+	case constants.TaskTypeShell:
+		result = ExecShell(taskCtx, message)
+	case constants.TaskTypeHTTP:
+		result = ExecHTTP(taskCtx, message)
 	default:
-		log.Printf("unknown task type %q for task %s", msg.Type, msg.TaskID)
+		log.Printf("task %s: unknown type %q", message.TaskID, message.Type)
 		return
 	}
 
-	w.publishEvent(ctx, msg, "log", map[string]string{"output": result.Output})
+	w.publishEvent(ctx, message, constants.EventLog, map[string]string{"output": result.Output})
 
-	status := "success"
-	eventType := "succeeded"
+	taskStatus := constants.StatusSuccess
+	completionEvent := constants.EventSucceeded
 	if result.Err != nil {
-		status = "failed"
-		eventType = "failed"
-		log.Printf("task %s failed: %v", msg.TaskID, result.Err)
+		taskStatus = constants.StatusFailed
+		completionEvent = constants.EventFailed
+		log.Printf("task %s failed: %v", message.TaskID, result.Err)
 	}
 
-	if err := w.db.MarkTaskDone(ctx, msg.TaskID, status); err != nil {
-		log.Printf("mark done %s: %v", msg.TaskID, err)
+	if err := w.db.MarkTaskDone(ctx, message.TaskID, taskStatus); err != nil {
+		log.Printf("mark task %s done failed: %v", message.TaskID, err)
 	}
-	w.publishEvent(ctx, msg, eventType, map[string]string{"status": status})
+	w.publishEvent(ctx, message, completionEvent, map[string]string{"status": taskStatus})
 }
 
-func (w *Worker) publishEvent(ctx context.Context, msg model.TaskMessage, eventType string, data any) {
-	ev := model.Event{
-		TaskID:    msg.TaskID,
-		RunID:     msg.RunID,
+func (w *Worker) publishEvent(ctx context.Context, message model.TaskMessage, eventType string, data any) {
+	event := model.Event{
+		TaskID:    message.TaskID,
+		RunID:     message.RunID,
 		EventType: eventType,
 		Timestamp: time.Now().UTC(),
 		Data:      data,
 	}
-	if err := w.queue.PublishEvent(ctx, ev); err != nil {
-		log.Printf("publish event %s for task %s: %v", eventType, msg.TaskID, err)
+	if err := w.queue.PublishEvent(ctx, event); err != nil {
+		log.Printf("publish %s event for task %s failed: %v", eventType, message.TaskID, err)
 	}
 }

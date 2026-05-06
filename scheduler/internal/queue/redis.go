@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/Tanapon-gau/miniflow/scheduler/internal/constants"
 )
 
 type TaskMessage struct {
@@ -31,12 +33,11 @@ func (q *Queue) Close() error {
 	return q.client.Close()
 }
 
-// Push serialises msg and prepends it to "tasks:{type}".
 // Workers consume via BRPOP (rightmost element = oldest = FIFO).
-func (q *Queue) Push(ctx context.Context, msg TaskMessage) error {
-	data, err := json.Marshal(msg)
+func (q *Queue) Push(ctx context.Context, message TaskMessage) error {
+	data, err := json.Marshal(message)
 	if err != nil {
-		return fmt.Errorf("marshal task message: %w", err)
+		return fmt.Errorf("marshal task message for task %s: %w", message.TaskID, err)
 	}
-	return q.client.LPush(ctx, "tasks:"+msg.Type, data).Err()
+	return q.client.LPush(ctx, constants.TaskQueuePrefix+message.Type, data).Err()
 }

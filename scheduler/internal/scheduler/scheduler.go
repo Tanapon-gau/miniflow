@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/Tanapon-gau/miniflow/scheduler/internal/constants"
 	"github.com/Tanapon-gau/miniflow/scheduler/internal/db"
 	"github.com/Tanapon-gau/miniflow/scheduler/internal/model"
 	"github.com/Tanapon-gau/miniflow/scheduler/internal/queue"
@@ -21,7 +22,6 @@ func New(database *db.DB, q *queue.Queue, interval time.Duration) *Scheduler {
 	return &Scheduler{db: database, queue: q, interval: interval}
 }
 
-// Run blocks, ticking on interval until ctx is cancelled.
 func (s *Scheduler) Run(ctx context.Context) {
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
@@ -44,14 +44,14 @@ func (s *Scheduler) tick(ctx context.Context) error {
 	}
 	for _, run := range runs {
 		if err := s.processRun(ctx, run); err != nil {
-			log.Printf("run %s: %v", run.ID, err)
+			log.Printf("process run %s failed: %v", run.ID, err)
 		}
 	}
 	return nil
 }
 
 func (s *Scheduler) processRun(ctx context.Context, run model.Run) error {
-	if run.Status == "pending" {
+	if run.Status == constants.StatusPending {
 		if err := s.db.MarkRunRunning(ctx, run.ID); err != nil {
 			return err
 		}
@@ -72,13 +72,12 @@ func (s *Scheduler) processRun(ctx context.Context, run model.Run) error {
 		return err
 	}
 
-	for _, t := range ReadyTasks(tasks, deps) {
-		if err := s.dispatch(ctx, t); err != nil {
-			log.Printf("dispatch task %s: %v", t.ID, err)
+	for _, task := range ReadyTasks(tasks, deps) {
+		if err := s.dispatch(ctx, task); err != nil {
+			log.Printf("dispatch task %s failed: %v", task.ID, err)
 		}
 	}
 
-	// re-fetch after dispatch to get updated statuses
 	tasks, err = s.db.TasksForRun(ctx, run.ID)
 	if err != nil {
 		return err
@@ -89,17 +88,17 @@ func (s *Scheduler) processRun(ctx context.Context, run model.Run) error {
 	return nil
 }
 
-func (s *Scheduler) dispatch(ctx context.Context, t model.Task) error {
-	if err := s.db.MarkTaskQueued(ctx, t.ID); err != nil {
+func (s *Scheduler) dispatch(ctx context.Context, task model.Task) error {
+	if err := s.db.MarkTaskQueued(ctx, task.ID); err != nil {
 		return err
 	}
 	return s.queue.Push(ctx, queue.TaskMessage{
-		TaskID:         t.ID,
-		RunID:          t.RunID,
-		Type:           t.Type,
-		Payload:        t.Payload,
-		TimeoutSeconds: t.TimeoutSeconds,
-		MaxRetries:     t.MaxRetries,
-		Attempt:        t.Attempt + 1,
+		TaskID:         task.ID,
+		RunID:          task.RunID,
+		Type:           task.Type,
+		Payload:        task.Payload,
+		TimeoutSeconds: task.TimeoutSeconds,
+		MaxRetries:     task.MaxRetries,
+		Attempt:        task.Attempt + 1,
 	})
 }

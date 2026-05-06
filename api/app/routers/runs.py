@@ -25,7 +25,10 @@ async def trigger_run(
 ) -> Run:
     workflow = await session.get(Workflow, workflow_id)
     if workflow is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="workflow not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"workflow {workflow_id} not found",
+        )
 
     run = Run(workflow_id=workflow_id)
     session.add(run)
@@ -72,5 +75,8 @@ async def get_run(
     )
     run = result.scalar_one_or_none()
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"run {run_id} not found",
+        )
     return run

@@ -133,6 +133,16 @@ Commit early and often. Each commit should leave the repo in a working state (te
 - **TypeScript**: eslint + prettier, strict mode on
 - **SQL**: snake_case tables and columns, plural table names
 
+### Code Readability
+
+- Names must be self-documenting. No abbreviations unless universally known (id, url, db).
+- Functions do one thing only. If a function name contains "and", split it.
+- No magic numbers or strings — use named constants.
+- Comments explain WHY, not WHAT. Delete comments that restate the code.
+- Error messages must include: what failed, where, and what value caused it.
+- Keep consistent naming across languages for the same concept:
+  task_id (Python) → taskID (Go) → task_id (SQL) → taskId (TypeScript)
+
 ### Testing
 - Every PR must add or update tests for changed behavior
 - API: pytest + httpx test client

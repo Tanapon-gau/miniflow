@@ -10,28 +10,29 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Tanapon-gau/miniflow/worker-go/internal/constants"
 	"github.com/Tanapon-gau/miniflow/worker-go/internal/model"
 	"github.com/Tanapon-gau/miniflow/worker-go/internal/worker"
 )
 
 func shellMsg(command string) model.TaskMessage {
-	p, _ := json.Marshal(model.ShellPayload{Command: command})
+	payload, _ := json.Marshal(model.ShellPayload{Command: command})
 	return model.TaskMessage{
 		TaskID:         uuid.New(),
 		RunID:          uuid.New(),
-		Type:           "shell",
-		Payload:        p,
+		Type:           constants.TaskTypeShell,
+		Payload:        payload,
 		TimeoutSeconds: 10,
 	}
 }
 
 func httpMsg(method, url, body string) model.TaskMessage {
-	p, _ := json.Marshal(model.HTTPPayload{Method: method, URL: url, Body: body})
+	payload, _ := json.Marshal(model.HTTPPayload{Method: method, URL: url, Body: body})
 	return model.TaskMessage{
 		TaskID:         uuid.New(),
 		RunID:          uuid.New(),
-		Type:           "http",
-		Payload:        p,
+		Type:           constants.TaskTypeHTTP,
+		Payload:        payload,
 		TimeoutSeconds: 10,
 	}
 }
@@ -39,18 +40,18 @@ func httpMsg(method, url, body string) model.TaskMessage {
 // --- shell ---
 
 func TestExecShell_Success(t *testing.T) {
-	res := worker.ExecShell(context.Background(), shellMsg("echo hello"))
-	if res.Err != nil {
-		t.Fatalf("unexpected error: %v", res.Err)
+	result := worker.ExecShell(context.Background(), shellMsg("echo hello"))
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v", result.Err)
 	}
-	if res.Output != "hello\n" {
-		t.Fatalf("unexpected output: %q", res.Output)
+	if result.Output != "hello\n" {
+		t.Fatalf("unexpected output: %q", result.Output)
 	}
 }
 
 func TestExecShell_NonZeroExit(t *testing.T) {
-	res := worker.ExecShell(context.Background(), shellMsg("exit 1"))
-	if res.Err == nil {
+	result := worker.ExecShell(context.Background(), shellMsg("exit 1"))
+	if result.Err == nil {
 		t.Fatal("expected error for exit 1")
 	}
 }
@@ -58,19 +59,24 @@ func TestExecShell_NonZeroExit(t *testing.T) {
 func TestExecShell_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	msg := shellMsg("sleep 10")
-	msg.TimeoutSeconds = 10 // outer timeout from context wins
-	res := worker.ExecShell(ctx, msg)
-	if res.Err == nil {
+	message := shellMsg("sleep 10")
+	// outer timeout from context wins over message.TimeoutSeconds
+	result := worker.ExecShell(ctx, message)
+	if result.Err == nil {
 		t.Fatal("expected timeout error")
 	}
 }
 
 func TestExecShell_MissingCommand(t *testing.T) {
-	p, _ := json.Marshal(model.ShellPayload{Command: ""})
-	msg := model.TaskMessage{TaskID: uuid.New(), Type: "shell", Payload: p, TimeoutSeconds: 5}
-	res := worker.ExecShell(context.Background(), msg)
-	if res.Err == nil {
+	payload, _ := json.Marshal(model.ShellPayload{Command: ""})
+	message := model.TaskMessage{
+		TaskID:         uuid.New(),
+		Type:           constants.TaskTypeShell,
+		Payload:        payload,
+		TimeoutSeconds: 5,
+	}
+	result := worker.ExecShell(context.Background(), message)
+	if result.Err == nil {
 		t.Fatal("expected error for empty command")
 	}
 }
@@ -84,9 +90,9 @@ func TestExecHTTP_200(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res := worker.ExecHTTP(context.Background(), httpMsg(http.MethodGet, srv.URL, ""))
-	if res.Err != nil {
-		t.Fatalf("unexpected error: %v", res.Err)
+	result := worker.ExecHTTP(context.Background(), httpMsg(http.MethodGet, srv.URL, ""))
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v", result.Err)
 	}
 }
 
@@ -96,33 +102,43 @@ func TestExecHTTP_500(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res := worker.ExecHTTP(context.Background(), httpMsg(http.MethodGet, srv.URL, ""))
-	if res.Err == nil {
+	result := worker.ExecHTTP(context.Background(), httpMsg(http.MethodGet, srv.URL, ""))
+	if result.Err == nil {
 		t.Fatal("expected error for 500")
 	}
 }
 
 func TestExecHTTP_DefaultMethodIsGET(t *testing.T) {
-	var gotMethod string
+	var receivedMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
+		receivedMethod = r.Method
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
-	p, _ := json.Marshal(model.HTTPPayload{URL: srv.URL}) // no method
-	msg := model.TaskMessage{TaskID: uuid.New(), Type: "http", Payload: p, TimeoutSeconds: 5}
-	worker.ExecHTTP(context.Background(), msg)
-	if gotMethod != http.MethodGet {
-		t.Fatalf("expected GET, got %s", gotMethod)
+	payload, _ := json.Marshal(model.HTTPPayload{URL: srv.URL})
+	message := model.TaskMessage{
+		TaskID:         uuid.New(),
+		Type:           constants.TaskTypeHTTP,
+		Payload:        payload,
+		TimeoutSeconds: 5,
+	}
+	worker.ExecHTTP(context.Background(), message)
+	if receivedMethod != http.MethodGet {
+		t.Fatalf("expected GET, got %s", receivedMethod)
 	}
 }
 
 func TestExecHTTP_MissingURL(t *testing.T) {
-	p, _ := json.Marshal(model.HTTPPayload{})
-	msg := model.TaskMessage{TaskID: uuid.New(), Type: "http", Payload: p, TimeoutSeconds: 5}
-	res := worker.ExecHTTP(context.Background(), msg)
-	if res.Err == nil {
+	payload, _ := json.Marshal(model.HTTPPayload{})
+	message := model.TaskMessage{
+		TaskID:         uuid.New(),
+		Type:           constants.TaskTypeHTTP,
+		Payload:        payload,
+		TimeoutSeconds: 5,
+	}
+	result := worker.ExecHTTP(context.Background(), message)
+	if result.Err == nil {
 		t.Fatal("expected error for missing url")
 	}
 }

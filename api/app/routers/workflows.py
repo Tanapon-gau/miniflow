@@ -13,10 +13,10 @@ router = APIRouter(prefix="/workflows", tags=["workflows"])
 
 @router.post("/", response_model=WorkflowRead, status_code=status.HTTP_201_CREATED)
 async def create_workflow(
-    body: WorkflowCreate,
+    workflow_in: WorkflowCreate,
     session: AsyncSession = Depends(get_session),
 ) -> Workflow:
-    workflow = Workflow(**body.model_dump())
+    workflow = Workflow(**workflow_in.model_dump())
     session.add(workflow)
     await session.commit()
     await session.refresh(workflow)
@@ -36,20 +36,26 @@ async def get_workflow(
 ) -> Workflow:
     workflow = await session.get(Workflow, workflow_id)
     if workflow is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="workflow not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"workflow {workflow_id} not found",
+        )
     return workflow
 
 
 @router.put("/{workflow_id}", response_model=WorkflowRead)
 async def update_workflow(
     workflow_id: uuid.UUID,
-    body: WorkflowUpdate,
+    update_in: WorkflowUpdate,
     session: AsyncSession = Depends(get_session),
 ) -> Workflow:
     workflow = await session.get(Workflow, workflow_id)
     if workflow is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="workflow not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"workflow {workflow_id} not found",
+        )
+    for field, value in update_in.model_dump(exclude_unset=True).items():
         setattr(workflow, field, value)
     await session.commit()
     await session.refresh(workflow)
@@ -63,6 +69,9 @@ async def delete_workflow(
 ) -> None:
     workflow = await session.get(Workflow, workflow_id)
     if workflow is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="workflow not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"workflow {workflow_id} not found",
+        )
     await session.delete(workflow)
     await session.commit()

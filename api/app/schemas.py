@@ -12,17 +12,19 @@ class WorkflowCreate(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def name_not_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("name must not be empty")
-        return v
+    def name_not_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(f"name must not be empty, got: {value!r}")
+        return value
 
     @field_validator("dag")
     @classmethod
-    def dag_has_tasks(cls, v: dict) -> dict:
-        if "tasks" not in v:
-            raise ValueError("dag must contain a 'tasks' key")
-        return v
+    def dag_has_tasks(cls, value: dict) -> dict:
+        if "tasks" not in value:
+            raise ValueError(
+                f"dag is missing required 'tasks' key, got keys: {sorted(value.keys())}"
+            )
+        return value
 
 
 class WorkflowUpdate(BaseModel):
@@ -32,17 +34,19 @@ class WorkflowUpdate(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def name_not_empty(cls, v: str | None) -> str | None:
-        if v is not None and not v.strip():
-            raise ValueError("name must not be empty")
-        return v
+    def name_not_empty(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError(f"name must not be empty, got: {value!r}")
+        return value
 
     @field_validator("dag")
     @classmethod
-    def dag_has_tasks(cls, v: dict | None) -> dict | None:
-        if v is not None and "tasks" not in v:
-            raise ValueError("dag must contain a 'tasks' key")
-        return v
+    def dag_has_tasks(cls, value: dict | None) -> dict | None:
+        if value is not None and "tasks" not in value:
+            raise ValueError(
+                f"dag is missing required 'tasks' key, got keys: {sorted(value.keys())}"
+            )
+        return value
 
 
 class WorkflowRead(BaseModel):
