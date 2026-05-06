@@ -1,4 +1,9 @@
-FROM golang:1.22-alpine
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
-# placeholder — worker-go not yet implemented
-CMD ["echo", "worker-go not yet implemented"]
+COPY go.mod .
+COPY . .
+RUN GOFLAGS=-mod=mod go build -o /worker ./cmd/worker
+
+FROM alpine:3.19
+COPY --from=builder /worker /worker
+CMD ["/worker"]

@@ -258,7 +258,7 @@ Update this section as work progresses. Mark items `[x]` when shipped.
 - [x] Go scheduler: poll runs, resolve DAG, dispatch
 - [x] Go worker: shell + http task types
 - [x] Python worker: python task type
-- [ ] End-to-end happy path test
+- [x] End-to-end happy path test
 
 ### Week 2 — Polish + Cloud
 - [ ] React UI: DAG view, run list, log stream

@@ -1,4 +1,17 @@
 FROM python:3.12-slim
 WORKDIR /app
-# placeholder — API service not yet implemented
-CMD ["echo", "api not yet implemented"]
+
+COPY pyproject.toml .
+RUN pip install --no-cache-dir \
+    fastapi \
+    "uvicorn[standard]" \
+    "sqlalchemy[asyncio]" \
+    asyncpg \
+    pydantic \
+    alembic
+
+COPY alembic.ini .
+COPY alembic/ alembic/
+COPY app/ app/
+
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

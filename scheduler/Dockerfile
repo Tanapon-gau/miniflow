@@ -1,4 +1,9 @@
-FROM golang:1.22-alpine
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
-# placeholder — scheduler not yet implemented
-CMD ["echo", "scheduler not yet implemented"]
+COPY go.mod .
+COPY . .
+RUN GOFLAGS=-mod=mod go build -o /scheduler ./cmd/scheduler
+
+FROM alpine:3.19
+COPY --from=builder /scheduler /scheduler
+CMD ["/scheduler"]

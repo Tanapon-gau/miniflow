@@ -25,5 +25,54 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://miniflow:miniflow@postgres:5432/miniflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "python3"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  scheduler:
+    build: ./scheduler
+    environment:
+      DATABASE_URL: postgres://miniflow:miniflow@postgres:5432/miniflow
+      REDIS_ADDR: redis:6379
+    depends_on:
+      api:
+        condition: service_healthy
+
+  worker-go:
+    build: ./worker-go
+    environment:
+      DATABASE_URL: postgres://miniflow:miniflow@postgres:5432/miniflow
+      REDIS_ADDR: redis:6379
+    depends_on:
+      api:
+        condition: service_healthy
+
+  worker-py:
+    build: ./worker-py
+    environment:
+      DATABASE_URL: postgresql://miniflow:miniflow@postgres:5432/miniflow
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   postgres_data:
