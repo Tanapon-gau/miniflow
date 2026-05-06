@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskMessage",
+  "description": "Message pushed to Redis queue when a task is ready to run",
+  "type": "object",
+  "required": ["task_id", "run_id", "type", "payload", "timeout_seconds", "max_retries", "attempt"],
+  "properties": {
+    "task_id": { "type": "string", "format": "uuid" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "type": { "type": "string", "enum": ["shell", "http", "python", "ml"] },
+    "payload": { "type": "object" },
+    "timeout_seconds": { "type": "integer", "minimum": 1 },
+    "max_retries": { "type": "integer", "minimum": 0 },
+    "attempt": { "type": "integer", "minimum": 1 }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Event",
+  "description": "Event published to Redis stream 'events' by workers",
+  "type": "object",
+  "required": ["task_id", "event", "timestamp"],
+  "properties": {
+    "task_id": { "type": "string", "format": "uuid" },
+    "event": { "type": "string", "enum": ["started", "log", "succeeded", "failed"] },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "data": { "type": "object" }
+  },
+  "additionalProperties": false
+}
