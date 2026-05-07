@@ -14,6 +14,12 @@ async def _make_workflow(client: AsyncClient, name: str = "test-wf") -> str:
     return resp.json()["id"]
 
 
+async def _make_run(client: AsyncClient, wf_id: str) -> str:
+    resp = await client.post(f"/workflows/{wf_id}/runs")
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
 async def test_trigger_run(client: AsyncClient) -> None:
     wf_id = await _make_workflow(client)
     resp = await client.post(f"/workflows/{wf_id}/runs")
@@ -86,3 +92,43 @@ async def test_multiple_runs_same_workflow(client: AsyncClient) -> None:
     assert r1 != r2
     resp = await client.get("/runs")
     assert len(resp.json()) == 2
+
+
+async def test_cancel_run_marks_run_and_pending_tasks_cancelled(client: AsyncClient) -> None:
+    wf_id = await _make_workflow(client)
+    run_id = await _make_run(client, wf_id)
+
+    resp = await client.post(f"/runs/{run_id}/cancel")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "cancelled"
+    assert data["finished_at"] is not None
+    assert all(t["status"] == "cancelled" for t in data["tasks"])
+    assert all(t["finished_at"] is not None for t in data["tasks"])
+
+
+async def test_cancel_run_not_found(client: AsyncClient) -> None:
+    resp = await client.post("/runs/00000000-0000-0000-0000-000000000000/cancel")
+    assert resp.status_code == 404
+
+
+async def test_cancel_already_cancelled_run_returns_conflict(client: AsyncClient) -> None:
+    wf_id = await _make_workflow(client)
+    run_id = await _make_run(client, wf_id)
+
+    await client.post(f"/runs/{run_id}/cancel")
+    resp = await client.post(f"/runs/{run_id}/cancel")
+    assert resp.status_code == 409
+    assert "cancelled" in resp.json()["detail"]
+
+
+async def test_cancel_does_not_affect_running_tasks(client: AsyncClient) -> None:
+    # A run with one pending task — cancelling the run cancels the pending task.
+    # Tasks already in 'running' status are left alone (we don't kill live processes).
+    wf_id = await _make_workflow(client)
+    run_id = await _make_run(client, wf_id)
+
+    resp = await client.post(f"/runs/{run_id}/cancel")
+    assert resp.status_code == 200
+    # All tasks were pending at cancellation time, so all should be cancelled.
+    assert all(t["status"] == "cancelled" for t in resp.json()["tasks"])

@@ -16,6 +16,8 @@ import (
 	"github.com/Tanapon-gau/miniflow/worker-go/internal/queue"
 )
 
+const cleanupTimeout = 5 * time.Second
+
 type Worker struct {
 	db    *db.DB
 	queue *queue.Queue
@@ -58,6 +60,7 @@ func (w *Worker) handle(ctx context.Context, data []byte) {
 	}
 	w.publishEvent(ctx, message, constants.EventStarted, nil)
 
+	// taskCtx derives from ctx so it is also cancelled on worker shutdown.
 	taskCtx, cancel := context.WithTimeout(ctx, time.Duration(message.TimeoutSeconds)*time.Second)
 	defer cancel()
 
@@ -72,25 +75,42 @@ func (w *Worker) handle(ctx context.Context, data []byte) {
 		return
 	}
 
-	w.publishEvent(ctx, message, constants.EventLog, map[string]string{"output": result.Output})
+	// If the parent context was cancelled (worker shutdown), task execution was
+	// forcibly interrupted. Use a short-lived cleanup context so we can still
+	// write the terminal state to the DB before the process exits.
+	writeCtx := ctx
+	if ctx.Err() != nil {
+		var cleanupCancel context.CancelFunc
+		writeCtx, cleanupCancel = context.WithTimeout(context.Background(), cleanupTimeout)
+		defer cleanupCancel()
+
+		log.Printf("task %s: worker shutting down, marking as failed", message.TaskID)
+		if err := w.db.MarkTaskDone(writeCtx, message.TaskID, constants.StatusFailed); err != nil {
+			log.Printf("mark task %s done (shutdown) failed: %v", message.TaskID, err)
+		}
+		w.publishEvent(writeCtx, message, constants.EventFailed, map[string]string{"status": constants.StatusFailed})
+		return
+	}
+
+	w.publishEvent(writeCtx, message, constants.EventLog, map[string]string{"output": result.Output})
 
 	if result.Err != nil {
 		log.Printf("task %s attempt %d failed: %v", message.TaskID, message.Attempt, result.Err)
 		if message.Attempt <= message.MaxRetries {
-			w.scheduleRetry(ctx, message)
+			w.scheduleRetry(writeCtx, message)
 			return
 		}
-		if err := w.db.MarkTaskDone(ctx, message.TaskID, constants.StatusFailed); err != nil {
+		if err := w.db.MarkTaskDone(writeCtx, message.TaskID, constants.StatusFailed); err != nil {
 			log.Printf("mark task %s done failed: %v", message.TaskID, err)
 		}
-		w.publishEvent(ctx, message, constants.EventFailed, map[string]string{"status": constants.StatusFailed})
+		w.publishEvent(writeCtx, message, constants.EventFailed, map[string]string{"status": constants.StatusFailed})
 		return
 	}
 
-	if err := w.db.MarkTaskDone(ctx, message.TaskID, constants.StatusSuccess); err != nil {
+	if err := w.db.MarkTaskDone(writeCtx, message.TaskID, constants.StatusSuccess); err != nil {
 		log.Printf("mark task %s done failed: %v", message.TaskID, err)
 	}
-	w.publishEvent(ctx, message, constants.EventSucceeded, map[string]string{"status": constants.StatusSuccess})
+	w.publishEvent(writeCtx, message, constants.EventSucceeded, map[string]string{"status": constants.StatusSuccess})
 }
 
 func (w *Worker) scheduleRetry(ctx context.Context, message model.TaskMessage) {
@@ -109,7 +129,8 @@ func (w *Worker) scheduleRetry(ctx context.Context, message model.TaskMessage) {
 	retryMessage := message
 	retryMessage.Attempt = nextAttempt
 
-	// sleep and re-queue in a goroutine so the consumer loop stays unblocked
+	// Sleep and re-queue in a goroutine so the consumer loop stays unblocked.
+	// The select on ctx.Done() ensures we skip re-queuing on worker shutdown.
 	go func() {
 		select {
 		case <-time.After(delay):

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -12,6 +13,8 @@ from ..schemas import RunDetail, RunRead
 router = APIRouter(tags=["runs"])
 
 _TASK_META_KEYS = {"name", "type", "timeout_seconds", "max_retries"}
+_CANCELLABLE_RUN_STATUSES = {"pending", "running"}
+_CANCELLABLE_TASK_STATUSES = {"pending", "queued"}
 
 
 @router.post(
@@ -49,6 +52,43 @@ async def trigger_run(
 
     result = await session.execute(
         select(Run).where(Run.id == run.id).options(selectinload(Run.tasks))
+    )
+    return result.scalar_one()
+
+
+@router.post("/runs/{run_id}/cancel", response_model=RunDetail)
+async def cancel_run(
+    run_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> Run:
+    result = await session.execute(
+        select(Run).where(Run.id == run_id).options(selectinload(Run.tasks))
+    )
+    run = result.scalar_one_or_none()
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"run {run_id} not found",
+        )
+    if run.status not in _CANCELLABLE_RUN_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"run {run_id} cannot be cancelled: already in status {run.status!r}",
+        )
+
+    now = datetime.now(timezone.utc)
+    run.status = "cancelled"
+    run.finished_at = now
+
+    for task in run.tasks:
+        if task.status in _CANCELLABLE_TASK_STATUSES:
+            task.status = "cancelled"
+            task.finished_at = now
+
+    await session.commit()
+
+    result = await session.execute(
+        select(Run).where(Run.id == run_id).options(selectinload(Run.tasks))
     )
     return result.scalar_one()
 

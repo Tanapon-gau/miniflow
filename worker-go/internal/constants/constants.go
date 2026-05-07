@@ -3,9 +3,10 @@ package constants
 import "time"
 
 const (
-	StatusRunning = "running"
-	StatusSuccess = "success"
-	StatusFailed  = "failed"
+	StatusRunning   = "running"
+	StatusSuccess   = "success"
+	StatusFailed    = "failed"
+	StatusCancelled = "cancelled"
 
 	TaskTypeShell = "shell"
 	TaskTypeHTTP  = "http"

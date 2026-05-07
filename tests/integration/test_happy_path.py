@@ -76,8 +76,8 @@ class TestShellTask:
         assert by_name["task_b"]["status"] == "success"
         # task_b must have started after task_a finished (dependency ordering)
         from datetime import datetime
-        b_started = datetime.fromisoformat(by_name["task_b"]["started_at"])
-        a_finished = datetime.fromisoformat(by_name["task_a"]["finished_at"])
+        b_started = datetime.fromisoformat(by_name["task_b"]["started_at"].replace("Z", "+00:00"))
+        a_finished = datetime.fromisoformat(by_name["task_a"]["finished_at"].replace("Z", "+00:00"))
         assert b_started >= a_finished, (
             f"task_b started at {b_started} before task_a finished at {a_finished}"
         )

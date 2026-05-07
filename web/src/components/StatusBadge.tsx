@@ -7,6 +7,7 @@ const STATUS_STYLE: Record<string, { background: string; color: string }> = {
   success: { background: '#d1fae5', color: '#065f46' },
   failed: { background: '#fee2e2', color: '#991b1b' },
   retrying: { background: '#ffedd5', color: '#9a3412' },
+  cancelled: { background: '#f3f4f6', color: '#6b7280' },
 }
 
 interface Props {

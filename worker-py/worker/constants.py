@@ -1,7 +1,8 @@
-STATUS_RUNNING = "running"
-STATUS_SUCCESS = "success"
-STATUS_FAILED = "failed"
-STATUS_RETRYING = "retrying"
+STATUS_RUNNING   = "running"
+STATUS_SUCCESS   = "success"
+STATUS_FAILED    = "failed"
+STATUS_RETRYING  = "retrying"
+STATUS_CANCELLED = "cancelled"
 
 TASK_TYPE_PYTHON = "python"
 TASK_TYPE_ML = "ml"

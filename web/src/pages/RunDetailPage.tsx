@@ -6,7 +6,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { TaskTable } from '../components/TaskTable'
 import type { RunDetail, Workflow } from '../types'
 
-const TERMINAL_STATUSES = new Set(['success', 'failed'])
+const TERMINAL_STATUSES = new Set(['success', 'failed', 'cancelled'])
 const POLL_INTERVAL_MS = 3000
 
 export function RunDetailPage() {
@@ -14,6 +14,7 @@ export function RunDetailPage() {
   const [run, setRun] = useState<RunDetail | null>(null)
   const [workflow, setWorkflow] = useState<Workflow | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function stopPolling() {
@@ -49,6 +50,20 @@ export function RunDetailPage() {
     return stopPolling
   }, [runId])
 
+  async function handleCancel() {
+    if (!runId || cancelling) return
+    setCancelling(true)
+    try {
+      const updated = await api.cancelRun(runId)
+      setRun(updated)
+      stopPolling()
+    } catch (err: unknown) {
+      setError(String(err))
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   if (error) return <p style={{ color: '#991b1b' }}>{error}</p>
   if (!run || !workflow) return <p style={{ color: '#6b7280' }}>Loading…</p>
 
@@ -64,9 +79,28 @@ export function RunDetailPage() {
         <h1 style={{ margin: 0 }}>Run {run.id.slice(0, 8)}…</h1>
         <StatusBadge status={run.status} />
         {isActive && (
-          <span style={{ color: '#9ca3af', fontSize: 13 }}>
-            Updating every {POLL_INTERVAL_MS / 1000}s…
-          </span>
+          <>
+            <span style={{ color: '#9ca3af', fontSize: 13 }}>
+              Updating every {POLL_INTERVAL_MS / 1000}s…
+            </span>
+            <button
+              onClick={() => void handleCancel()}
+              disabled={cancelling}
+              style={{
+                marginLeft: 'auto',
+                padding: '4px 12px',
+                background: cancelling ? '#e5e7eb' : '#fee2e2',
+                color: cancelling ? '#9ca3af' : '#991b1b',
+                border: '1px solid #fca5a5',
+                borderRadius: 4,
+                cursor: cancelling ? 'not-allowed' : 'pointer',
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              {cancelling ? 'Cancelling…' : 'Cancel Run'}
+            </button>
+          </>
         )}
       </div>
 

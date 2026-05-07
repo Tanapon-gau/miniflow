@@ -1,5 +1,5 @@
-export type TaskStatus = 'pending' | 'queued' | 'running' | 'success' | 'failed' | 'retrying'
-export type RunStatus = 'pending' | 'running' | 'success' | 'failed'
+export type TaskStatus = 'pending' | 'queued' | 'running' | 'success' | 'failed' | 'retrying' | 'cancelled'
+export type RunStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled'
 
 export interface Task {
   id: string

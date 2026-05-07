@@ -21,4 +21,6 @@ export const api = {
   getRun: (id: string) => fetchJSON<RunDetail>(`/runs/${id}`),
   triggerRun: (workflowId: string) =>
     fetchJSON<RunDetail>(`/workflows/${workflowId}/runs`, { method: 'POST' }),
+  cancelRun: (runId: string) =>
+    fetchJSON<RunDetail>(`/runs/${runId}/cancel`, { method: 'POST' }),
 }

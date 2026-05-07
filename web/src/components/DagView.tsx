@@ -10,6 +10,7 @@ const STATUS_COLOR: Record<string, string> = {
   success: '#a7f3d0',
   failed: '#fca5a5',
   retrying: '#fed7aa',
+  cancelled: '#f3f4f6',
 }
 
 interface Props {

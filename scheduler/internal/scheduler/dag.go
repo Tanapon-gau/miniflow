@@ -40,7 +40,7 @@ func ReadyTasks(tasks []model.Task, deps map[string][]string) []model.Task {
 func RunOutcome(tasks []model.Task) string {
 	for _, task := range tasks {
 		switch task.Status {
-		case constants.StatusFailed:
+		case constants.StatusFailed, constants.StatusCancelled:
 			return constants.StatusFailed
 		case constants.StatusPending, constants.StatusQueued, constants.StatusRunning, constants.StatusRetrying:
 			return ""
