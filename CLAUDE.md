@@ -262,7 +262,7 @@ Update this section as work progresses. Mark items `[x]` when shipped.
 
 ### Week 2 — Polish + Cloud
 - [x] React UI: DAG view, run list, log stream
-- [ ] Retry logic + exponential backoff
+- [x] Retry logic + exponential backoff
 - [ ] Timeouts and cancellation
 - [ ] Terraform modules (network, db, redis, services)
 - [ ] Deploy to cloud dev environment

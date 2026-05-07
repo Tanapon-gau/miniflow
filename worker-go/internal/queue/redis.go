@@ -32,6 +32,23 @@ func (q *Queue) BRPop(ctx context.Context) ([]byte, string, error) {
 	return []byte(result[1]), result[0], nil
 }
 
+func (q *Queue) Push(ctx context.Context, message model.TaskMessage) error {
+	data, err := json.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("marshal task message for task %s: %w", message.TaskID, err)
+	}
+	var queueName string
+	switch message.Type {
+	case constants.TaskTypeShell:
+		queueName = constants.QueueShell
+	case constants.TaskTypeHTTP:
+		queueName = constants.QueueHTTP
+	default:
+		return fmt.Errorf("task %s: unknown type %q, cannot re-queue", message.TaskID, message.Type)
+	}
+	return q.client.LPush(ctx, queueName, data).Err()
+}
+
 func (q *Queue) PublishEvent(ctx context.Context, event model.Event) error {
 	data, err := json.Marshal(event)
 	if err != nil {

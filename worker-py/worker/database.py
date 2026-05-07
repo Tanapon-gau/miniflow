@@ -12,11 +12,11 @@ class WorkerDatabase:
     def close(self) -> None:
         self._connection.close()
 
-    def mark_task_running(self, task_id: UUID) -> None:
+    def mark_task_running(self, task_id: UUID, attempt: int) -> None:
         with self._connection.cursor() as cursor:
             cursor.execute(
-                "UPDATE tasks SET status = %s, started_at = NOW() WHERE id = %s",
-                (constants.STATUS_RUNNING, str(task_id)),
+                "UPDATE tasks SET status = %s, started_at = NOW(), attempt = %s WHERE id = %s",
+                (constants.STATUS_RUNNING, attempt, str(task_id)),
             )
         self._connection.commit()
 
@@ -25,5 +25,13 @@ class WorkerDatabase:
             cursor.execute(
                 "UPDATE tasks SET status = %s, finished_at = NOW() WHERE id = %s",
                 (status, str(task_id)),
+            )
+        self._connection.commit()
+
+    def mark_task_retrying(self, task_id: UUID, attempt: int) -> None:
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE tasks SET status = %s, finished_at = NOW(), attempt = %s WHERE id = %s",
+                (constants.STATUS_RETRYING, attempt, str(task_id)),
             )
         self._connection.commit()

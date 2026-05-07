@@ -1,4 +1,7 @@
+import json
 import logging
+import threading
+import time
 from threading import Event
 
 import redis
@@ -10,6 +13,16 @@ from worker.executor import run_python_task
 from worker.models import TaskMessage
 
 logger = logging.getLogger(__name__)
+
+
+def _retry_delay(attempt: int) -> float:
+    """Return backoff seconds for the given failed attempt (1-based).
+
+    Formula: base * 2^(attempt-1), capped at RETRY_MAX_DELAY_SECONDS.
+    """
+    shift = max(0, attempt - 1)
+    delay = constants.RETRY_BASE_DELAY_SECONDS * (2**shift)
+    return float(min(delay, constants.RETRY_MAX_DELAY_SECONDS))
 
 
 def consume_forever(
@@ -32,16 +45,17 @@ def consume_forever(
             logger.error("failed to parse task message: %s — raw: %.200s", exc, raw_data)
             continue
 
-        _handle(message, database, publisher)
+        _handle(message, database, publisher, redis_client)
 
 
 def _handle(
     message: TaskMessage,
     database: WorkerDatabase,
     publisher: EventPublisher,
+    redis_client: redis.Redis,  # type: ignore[type-arg]
 ) -> None:
     try:
-        database.mark_task_running(message.task_id)
+        database.mark_task_running(message.task_id, message.attempt)
     except Exception as exc:
         logger.error("mark task %s running failed: %s", message.task_id, exc)
         return
@@ -58,21 +72,90 @@ def _handle(
     )
 
     if result.error is not None:
-        logger.error("task %s failed: %s", message.task_id, result.error)
-        task_status = constants.STATUS_FAILED
-        completion_event = constants.EVENT_FAILED
-    else:
-        task_status = constants.STATUS_SUCCESS
-        completion_event = constants.EVENT_SUCCEEDED
+        logger.error("task %s attempt %d failed: %s", message.task_id, message.attempt, result.error)
+        if message.attempt <= message.max_retries:
+            _schedule_retry(message, database, publisher, redis_client)
+            return
+
+        try:
+            database.mark_task_done(message.task_id, constants.STATUS_FAILED)
+        except Exception as exc:
+            logger.error("mark task %s done failed: %s", message.task_id, exc)
+        publisher.publish(
+            message.task_id,
+            message.run_id,
+            constants.EVENT_FAILED,
+            {"status": constants.STATUS_FAILED},
+        )
+        return
 
     try:
-        database.mark_task_done(message.task_id, task_status)
+        database.mark_task_done(message.task_id, constants.STATUS_SUCCESS)
     except Exception as exc:
         logger.error("mark task %s done failed: %s", message.task_id, exc)
+    publisher.publish(
+        message.task_id,
+        message.run_id,
+        constants.EVENT_SUCCEEDED,
+        {"status": constants.STATUS_SUCCESS},
+    )
+
+
+def _schedule_retry(
+    message: TaskMessage,
+    database: WorkerDatabase,
+    publisher: EventPublisher,
+    redis_client: redis.Redis,  # type: ignore[type-arg]
+) -> None:
+    next_attempt = message.attempt + 1
+    delay = _retry_delay(message.attempt)
+
+    try:
+        database.mark_task_retrying(message.task_id, message.attempt)
+    except Exception as exc:
+        logger.error("mark task %s retrying failed: %s", message.task_id, exc)
 
     publisher.publish(
         message.task_id,
         message.run_id,
-        completion_event,
-        {"status": task_status},
+        constants.EVENT_RETRYING,
+        {"attempt": message.attempt, "next_in": f"{delay:.0f}s"},
     )
+    logger.info(
+        "task %s: attempt %d/%d failed, retrying in %.0fs",
+        message.task_id,
+        message.attempt,
+        message.max_retries + 1,
+        delay,
+    )
+
+    retry_message = TaskMessage(
+        task_id=message.task_id,
+        run_id=message.run_id,
+        type=message.type,
+        payload=message.payload,
+        timeout_seconds=message.timeout_seconds,
+        max_retries=message.max_retries,
+        attempt=next_attempt,
+    )
+    raw = json.dumps(
+        {
+            "task_id": str(retry_message.task_id),
+            "run_id": str(retry_message.run_id),
+            "type": retry_message.type,
+            "payload": retry_message.payload,
+            "timeout_seconds": retry_message.timeout_seconds,
+            "max_retries": retry_message.max_retries,
+            "attempt": retry_message.attempt,
+        }
+    ).encode()
+
+    queue_name = constants.QUEUE_PYTHON if message.type == constants.TASK_TYPE_PYTHON else constants.QUEUE_ML
+
+    # sleep and re-queue in a background thread so the consumer loop stays unblocked
+    def _push() -> None:
+        time.sleep(delay)
+        redis_client.lpush(queue_name, raw)
+
+    thread = threading.Thread(target=_push, daemon=True)
+    thread.start()

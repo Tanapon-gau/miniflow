@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -51,7 +52,7 @@ func (w *Worker) handle(ctx context.Context, data []byte) {
 		return
 	}
 
-	if err := w.db.MarkTaskRunning(ctx, message.TaskID); err != nil {
+	if err := w.db.MarkTaskRunning(ctx, message.TaskID, message.Attempt); err != nil {
 		log.Printf("mark task %s running failed: %v", message.TaskID, err)
 		return
 	}
@@ -73,18 +74,51 @@ func (w *Worker) handle(ctx context.Context, data []byte) {
 
 	w.publishEvent(ctx, message, constants.EventLog, map[string]string{"output": result.Output})
 
-	taskStatus := constants.StatusSuccess
-	completionEvent := constants.EventSucceeded
 	if result.Err != nil {
-		taskStatus = constants.StatusFailed
-		completionEvent = constants.EventFailed
-		log.Printf("task %s failed: %v", message.TaskID, result.Err)
+		log.Printf("task %s attempt %d failed: %v", message.TaskID, message.Attempt, result.Err)
+		if message.Attempt <= message.MaxRetries {
+			w.scheduleRetry(ctx, message)
+			return
+		}
+		if err := w.db.MarkTaskDone(ctx, message.TaskID, constants.StatusFailed); err != nil {
+			log.Printf("mark task %s done failed: %v", message.TaskID, err)
+		}
+		w.publishEvent(ctx, message, constants.EventFailed, map[string]string{"status": constants.StatusFailed})
+		return
 	}
 
-	if err := w.db.MarkTaskDone(ctx, message.TaskID, taskStatus); err != nil {
+	if err := w.db.MarkTaskDone(ctx, message.TaskID, constants.StatusSuccess); err != nil {
 		log.Printf("mark task %s done failed: %v", message.TaskID, err)
 	}
-	w.publishEvent(ctx, message, completionEvent, map[string]string{"status": taskStatus})
+	w.publishEvent(ctx, message, constants.EventSucceeded, map[string]string{"status": constants.StatusSuccess})
+}
+
+func (w *Worker) scheduleRetry(ctx context.Context, message model.TaskMessage) {
+	nextAttempt := message.Attempt + 1
+	delay := RetryDelay(message.Attempt)
+
+	if err := w.db.MarkTaskRetrying(ctx, message.TaskID, message.Attempt); err != nil {
+		log.Printf("mark task %s retrying failed: %v", message.TaskID, err)
+	}
+	w.publishEvent(ctx, message, constants.EventRetrying,
+		map[string]string{"attempt": fmt.Sprintf("%d", message.Attempt), "next_in": delay.String()})
+
+	log.Printf("task %s: attempt %d/%d failed, retrying in %s",
+		message.TaskID, message.Attempt, message.MaxRetries+1, delay)
+
+	retryMessage := message
+	retryMessage.Attempt = nextAttempt
+
+	// sleep and re-queue in a goroutine so the consumer loop stays unblocked
+	go func() {
+		select {
+		case <-time.After(delay):
+			if err := w.queue.Push(ctx, retryMessage); err != nil {
+				log.Printf("re-queue task %s attempt %d failed: %v", message.TaskID, nextAttempt, err)
+			}
+		case <-ctx.Done():
+		}
+	}()
 }
 
 func (w *Worker) publishEvent(ctx context.Context, message model.TaskMessage, eventType string, data any) {

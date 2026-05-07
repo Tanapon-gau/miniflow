@@ -25,10 +25,10 @@ func (d *DB) Close() {
 	d.pool.Close()
 }
 
-func (d *DB) MarkTaskRunning(ctx context.Context, id uuid.UUID) error {
+func (d *DB) MarkTaskRunning(ctx context.Context, id uuid.UUID, attempt int) error {
 	_, err := d.pool.Exec(ctx,
-		`UPDATE tasks SET status = 'running', started_at = $1 WHERE id = $2`,
-		time.Now().UTC(), id)
+		`UPDATE tasks SET status = 'running', started_at = $1, attempt = $2 WHERE id = $3`,
+		time.Now().UTC(), attempt, id)
 	return err
 }
 
@@ -36,5 +36,12 @@ func (d *DB) MarkTaskDone(ctx context.Context, id uuid.UUID, status string) erro
 	_, err := d.pool.Exec(ctx,
 		`UPDATE tasks SET status = $1, finished_at = $2 WHERE id = $3`,
 		status, time.Now().UTC(), id)
+	return err
+}
+
+func (d *DB) MarkTaskRetrying(ctx context.Context, id uuid.UUID, attempt int) error {
+	_, err := d.pool.Exec(ctx,
+		`UPDATE tasks SET status = 'retrying', finished_at = $1, attempt = $2 WHERE id = $3`,
+		time.Now().UTC(), attempt, id)
 	return err
 }

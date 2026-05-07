@@ -82,6 +82,29 @@ class TestShellTask:
             f"task_b started at {b_started} before task_a finished at {a_finished}"
         )
 
+    def test_retry_exhausted_marks_run_failed(self, api_client: httpx.Client) -> None:
+        # max_retries=2 → 3 total attempts (1 initial + 2 retries), all fail → run failed
+        dag = {
+            "tasks": [
+                {
+                    "name": "always_fails",
+                    "type": "shell",
+                    "command": "exit 1",
+                    "timeout_seconds": 10,
+                    "max_retries": 2,
+                }
+            ]
+        }
+        run_id = trigger_run(api_client, create_workflow(api_client, dag))
+        run = wait_for_completion(api_client, run_id)
+
+        assert run["status"] == "failed"
+        task = run["tasks"][0]
+        assert task["status"] == "failed"
+        assert task["attempt"] == 3, (
+            f"expected 3 attempts (1 initial + 2 retries), got {task['attempt']}"
+        )
+
     def test_failing_task_marks_run_failed(self, api_client: httpx.Client) -> None:
         dag = {
             "tasks": [
