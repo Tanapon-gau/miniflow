@@ -266,7 +266,7 @@ Update this section as work progresses. Mark items `[x]` when shipped.
 - [x] Timeouts and cancellation
 - [x] Terraform modules (network, db, redis, services)
 - [ ] Deploy to cloud dev environment
-- [ ] README with quickstart and demo workflow
+- [x] README with quickstart and demo workflow
 
 ---
 
