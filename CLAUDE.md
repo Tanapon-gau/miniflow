@@ -264,7 +264,7 @@ Update this section as work progresses. Mark items `[x]` when shipped.
 - [x] React UI: DAG view, run list, log stream
 - [x] Retry logic + exponential backoff
 - [x] Timeouts and cancellation
-- [ ] Terraform modules (network, db, redis, services)
+- [x] Terraform modules (network, db, redis, services)
 - [ ] Deploy to cloud dev environment
 - [ ] README with quickstart and demo workflow
 
