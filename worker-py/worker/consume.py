@@ -61,6 +61,12 @@ def _handle(
         return
 
     publisher.publish(message.task_id, message.run_id, constants.EVENT_STARTED)
+    logger.info(
+        "task %s (type=%s, attempt=%d) started",
+        message.task_id,
+        message.type,
+        message.attempt,
+    )
 
     result = run_python_task(message)
 
@@ -99,6 +105,7 @@ def _handle(
         constants.EVENT_SUCCEEDED,
         {"status": constants.STATUS_SUCCESS},
     )
+    logger.info("task %s (type=%s) succeeded", message.task_id, message.type)
 
 
 def _schedule_retry(

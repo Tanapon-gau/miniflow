@@ -59,6 +59,7 @@ func (w *Worker) handle(ctx context.Context, data []byte) {
 		return
 	}
 	w.publishEvent(ctx, message, constants.EventStarted, nil)
+	log.Printf("task %s (type=%s, attempt=%d) started", message.TaskID, message.Type, message.Attempt)
 
 	// taskCtx derives from ctx so it is also cancelled on worker shutdown.
 	taskCtx, cancel := context.WithTimeout(ctx, time.Duration(message.TimeoutSeconds)*time.Second)
@@ -111,6 +112,7 @@ func (w *Worker) handle(ctx context.Context, data []byte) {
 		log.Printf("mark task %s done failed: %v", message.TaskID, err)
 	}
 	w.publishEvent(writeCtx, message, constants.EventSucceeded, map[string]string{"status": constants.StatusSuccess})
+	log.Printf("task %s (type=%s) succeeded", message.TaskID, message.Type)
 }
 
 func (w *Worker) scheduleRetry(ctx context.Context, message model.TaskMessage) {
