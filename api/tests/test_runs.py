@@ -132,3 +132,83 @@ async def test_cancel_does_not_affect_running_tasks(client: AsyncClient) -> None
     assert resp.status_code == 200
     # All tasks were pending at cancellation time, so all should be cancelled.
     assert all(t["status"] == "cancelled" for t in resp.json()["tasks"])
+
+
+async def test_get_run_timeline(client: AsyncClient) -> None:
+    wf_id = await _make_workflow(client)
+    run_id = await _make_run(client, wf_id)
+
+    resp = await client.get(f"/runs/{run_id}/timeline")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["run_id"] == run_id
+    assert data["status"] == "pending"
+    assert data["triggered_at"] is not None
+    assert data["finished_at"] is None
+    assert len(data["tasks"]) == 2
+
+    task = data["tasks"][0]
+    assert set(task.keys()) == {
+        "task_id",
+        "name",
+        "status",
+        "queued_at",
+        "started_at",
+        "finished_at",
+        "duration_seconds",
+    }
+    assert task["queued_at"] is not None
+    assert task["started_at"] is None
+    assert task["finished_at"] is None
+    assert task["duration_seconds"] is None
+
+
+async def test_get_run_timeline_orders_tasks_by_queued_at(client: AsyncClient) -> None:
+    wf_id = await _make_workflow(client)
+    run_id = await _make_run(client, wf_id)
+
+    resp = await client.get(f"/runs/{run_id}/timeline")
+    queued = [t["queued_at"] for t in resp.json()["tasks"]]
+    assert queued == sorted(queued)
+
+
+async def test_get_run_timeline_not_found(client: AsyncClient) -> None:
+    resp = await client.get("/runs/00000000-0000-0000-0000-000000000000/timeline")
+    assert resp.status_code == 404
+
+
+def test_timeline_duration_seconds_computed() -> None:
+    import uuid
+    from datetime import datetime, timedelta, timezone
+
+    from app.schemas import TaskTimeline
+
+    started = datetime(2026, 5, 12, 10, 0, 0, tzinfo=timezone.utc)
+    t = TaskTimeline(
+        task_id=uuid.uuid4(),
+        name="step",
+        status="success",
+        queued_at=started - timedelta(seconds=5),
+        started_at=started,
+        finished_at=started + timedelta(seconds=42),
+    )
+    assert t.duration_seconds == 42.0
+
+
+def test_timeline_duration_seconds_none_when_unfinished() -> None:
+    import uuid
+    from datetime import datetime, timezone
+
+    from app.schemas import TaskTimeline
+
+    now = datetime(2026, 5, 12, 10, 0, 0, tzinfo=timezone.utc)
+    t = TaskTimeline(
+        task_id=uuid.uuid4(),
+        name="step",
+        status="running",
+        queued_at=now,
+        started_at=now,
+        finished_at=None,
+    )
+    assert t.duration_seconds is None

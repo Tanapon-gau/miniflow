@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from ..deps import get_session
 from ..models import Run, Task, Workflow
-from ..schemas import RunDetail, RunRead
+from ..schemas import RunDetail, RunRead, RunTimeline, TaskTimeline
 
 router = APIRouter(tags=["runs"])
 
@@ -120,3 +120,38 @@ async def get_run(
             detail=f"run {run_id} not found",
         )
     return run
+
+
+@router.get("/runs/{run_id}/timeline", response_model=RunTimeline)
+async def get_run_timeline(
+    run_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> RunTimeline:
+    result = await session.execute(
+        select(Run).where(Run.id == run_id).options(selectinload(Run.tasks))
+    )
+    run = result.scalar_one_or_none()
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"run {run_id} not found",
+        )
+
+    tasks = sorted(run.tasks, key=lambda t: t.created_at)
+    return RunTimeline(
+        run_id=run.id,
+        status=run.status,
+        triggered_at=run.triggered_at,
+        finished_at=run.finished_at,
+        tasks=[
+            TaskTimeline(
+                task_id=t.id,
+                name=t.name,
+                status=t.status,
+                queued_at=t.created_at,
+                started_at=t.started_at,
+                finished_at=t.finished_at,
+            )
+            for t in tasks
+        ],
+    )

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, computed_field, field_validator
 
 
 class WorkflowCreate(BaseModel):
@@ -91,3 +91,27 @@ class RunRead(BaseModel):
 
 class RunDetail(RunRead):
     tasks: list[TaskRead]
+
+
+class TaskTimeline(BaseModel):
+    task_id: uuid.UUID
+    name: str
+    status: str
+    queued_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+    @computed_field
+    @property
+    def duration_seconds(self) -> float | None:
+        if self.started_at and self.finished_at:
+            return (self.finished_at - self.started_at).total_seconds()
+        return None
+
+
+class RunTimeline(BaseModel):
+    run_id: uuid.UUID
+    status: str
+    triggered_at: datetime
+    finished_at: datetime | None
+    tasks: list[TaskTimeline]
