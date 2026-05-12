@@ -14,8 +14,8 @@ func RetryDelay(attempt int) time.Duration {
 		return constants.RetryBaseDelay
 	}
 	shift := attempt - 1
-	if shift > 4 { // 2^4 * 1s = 16s; next doubling would exceed 30s cap
-		shift = 4
+	if shift > 30 { // guard against int64 overflow on pathological attempt counts
+		return constants.RetryMaxDelay
 	}
 	delay := constants.RetryBaseDelay << uint(shift)
 	if delay > constants.RetryMaxDelay {
