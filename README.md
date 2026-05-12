@@ -70,7 +70,7 @@ Create and run a three-task pipeline that shows dependency ordering:
 
 ```bash
 # 1. Create the workflow
-curl -s -X POST http://localhost:8000/workflows \
+curl -s -X POST http://localhost:8000/workflows/ \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "demo-pipeline",
@@ -115,7 +115,7 @@ Or skip the terminal entirely and use the web UI at `http://localhost:5173`.
 |------|--------|----------------|
 | `shell` | worker-go | `"command": "echo hello"` |
 | `http` | worker-go | `"url": "https://example.com", "method": "GET"` |
-| `python` | worker-py | `"code": "print('hello')"` |
+| `python` | worker-py | `"script": "print('hello')"` |
 
 ### Task options
 
@@ -137,11 +137,14 @@ Or skip the terminal entirely and use the web UI at `http://localhost:5173`.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/workflows/` | List all workflows |
-| `POST` | `/workflows` | Create a workflow |
+| `POST` | `/workflows/` | Create a workflow |
 | `GET` | `/workflows/{id}` | Get a workflow |
+| `PUT` | `/workflows/{id}` | Update a workflow (partial) |
+| `DELETE` | `/workflows/{id}` | Delete a workflow |
 | `POST` | `/workflows/{id}/runs` | Trigger a run |
 | `GET` | `/runs` | List runs (optional `?workflow_id=`) |
 | `GET` | `/runs/{id}` | Get run detail with task statuses |
+| `GET` | `/runs/{id}/timeline` | Get per-task timeline with durations |
 | `POST` | `/runs/{id}/cancel` | Cancel a pending/running run |
 | `GET` | `/health` | Health check |
 
@@ -230,9 +233,8 @@ miniflow/
 ├── infra/        # Terraform — AWS deployment
 ├── shared/       # JSON Schema contracts (task messages, events)
 ├── tests/        # Integration tests (run against docker-compose)
-├── docs/adr/     # Architecture Decision Records
 ├── docker-compose.yml
 └── Makefile
 ```
 
-See `docs/adr/` for design decisions and `shared/schemas/` for inter-service message contracts.
+See `shared/schemas/` for inter-service message contracts.
